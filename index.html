@@ -1,0 +1,517 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wikirace</title>
+<style>
+  :root {
+    --bg: #f7f7f5; --panel: #ffffff; --panel-2: #f0efeb; --text: #1c1b19; --text-2: #34322e; --muted: #6f6c66;
+    --line: #e4e2dd; --accent: #2458d6; --on-accent: #ffffff; --accent-soft: #e3eafb; --link: #2458d6;
+    --bar: #dcd9d3; --win: #1b7f3b; --lose: #b3261e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #121210; --panel: #1c1b19; --panel-2: #26241f; --text: #f1efea; --text-2: #d6d2ca; --muted: #a09c94;
+      --line: #2e2c29; --accent: #7aa2ff; --on-accent: #0d1424; --accent-soft: #1f2a44; --link: #8fb2ff;
+      --bar: #3a3834; --win: #5fd184; --lose: #ff8a80;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 1.6rem; margin: 0; }
+  .lede { color: var(--muted); margin: 4px 0 24px; }
+  a { color: inherit; text-decoration-color: var(--line); text-underline-offset: 3px; }
+  [hidden] { display: none !important; }
+
+  form.fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  label { display: grid; gap: 4px; font-size: .85rem; color: var(--muted); }
+  input {
+    font: inherit; color: var(--text); background: var(--panel);
+    border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; min-width: 0;
+  }
+  input:focus-visible, button:focus-visible, .wiki a[data-title]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  button {
+    font: inherit; font-weight: 600; color: var(--on-accent); background: var(--accent);
+    border: 1px solid var(--accent); border-radius: 8px; padding: 9px 20px; cursor: pointer;
+  }
+  button.secondary { color: var(--text); background: var(--panel); border-color: var(--line); }
+  button:disabled { opacity: .55; cursor: default; }
+  .locked { font-size: .9rem; color: var(--muted); }
+  @media (max-width: 560px) { form.fields { grid-template-columns: 1fr; } }
+  .message { margin: 16px 0 0; color: var(--muted); min-height: 1.5em; }
+  .message.error { color: var(--lose); }
+
+  /* ---------- playing ---------- */
+  .bar {
+    position: sticky; top: 0; z-index: 1; background: var(--panel); border-bottom: 1px solid var(--line);
+  }
+  .bar-inner { max-width: 760px; margin: 0 auto; padding: 10px 16px; display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center; }
+  .bar .goal { flex: 1 1 16rem; min-width: 0; }
+  .bar .goal small { display: block; color: var(--muted); font-size: .78rem; }
+  .bar .goal strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bar .stat { font-variant-numeric: tabular-nums; text-align: right; }
+  .bar .stat small { display: block; color: var(--muted); font-size: .78rem; }
+  .bar button { padding: 6px 14px; }
+  #page-title { font-size: 1.8rem; margin: 0 0 12px; }
+  #game.busy .wiki { opacity: .45; pointer-events: none; }
+
+  /* ---------- results and Jev ---------- */
+  .path { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 12px 0 0; padding: 0; list-style: none; }
+  .path li { display: flex; align-items: center; gap: 6px; }
+  .path li + li::before { content: "→"; color: var(--muted); }
+  .chip { padding: 2px 10px; border-radius: 999px; background: var(--panel); border: 1px solid var(--line); font-size: .9rem; }
+  .chip.target { border-style: dashed; color: var(--muted); }
+  .chip.reached { border: 1px solid var(--win); color: var(--win); font-weight: 600; }
+  .summary { margin: 20px 0 0; padding: 14px 16px; border-radius: 12px; background: var(--accent-soft); font-variant-numeric: tabular-nums; }
+  .summary strong.won { color: var(--win); }
+  .summary strong.lost { color: var(--lose); }
+  .summary p { margin: 4px 0 0; font-size: .9rem; color: var(--muted); }
+  .summary .actions { margin-top: 12px; }
+
+  #hops { list-style: none; margin: 20px 0 0; padding: 0; display: grid; gap: 12px; }
+  .hop { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; animation: in .25s ease-out; }
+  @keyframes in { from { opacity: 0; transform: translateY(6px); } }
+  @media (prefers-reduced-motion: reduce) { .hop { animation: none; } }
+  .hop header { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 16px; align-items: baseline; }
+  .hop h2 { font-size: 1.05rem; margin: 0; }
+  .hop h2 .n { color: var(--muted); font-weight: 400; margin-right: 6px; }
+  .meta { font-size: .82rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .note { margin: 8px 0 0; color: var(--muted); }
+  .options { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 4px; }
+  .option { display: grid; grid-template-columns: minmax(0, 14rem) minmax(4rem, 1fr) 3.5rem; gap: 10px; align-items: center; font-size: .9rem; }
+  .option .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .option .track { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
+  .option .fill { display: block; height: 100%; background: var(--bar); border-radius: 4px; }
+  .option .pct { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+  .option.chosen .name { font-weight: 600; }
+  .option.chosen .fill { background: var(--accent); }
+  .option.chosen .pct { color: var(--text); }
+
+  /* ---------- article content, adapted from wikirun's public/style.css ---------- */
+  .wiki { color: var(--text-2); line-height: 1.7; overflow-wrap: break-word; }
+  .wiki b, .wiki strong { color: var(--text); }
+  .wiki a[data-title] { color: var(--link); text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--link) 35%, transparent); text-underline-offset: 3px; cursor: pointer; border-radius: 2px; }
+  @media (hover: hover) { .wiki a[data-title]:hover { background: color-mix(in srgb, var(--link) 12%, transparent); text-decoration-color: currentColor; } }
+  .wiki p { margin: .5rem 0 .9rem; }
+  .wiki .mw-heading2, .wiki h2 { clear: both; }
+  .wiki h2 { margin: 2rem 0 .7rem; padding-bottom: .35rem; border-bottom: 1px solid var(--line); color: var(--text); font-size: 1.4rem; line-height: 1.2; }
+  .wiki h3 { margin: 1.4rem 0 .45rem; color: var(--text); font-size: 1.15rem; }
+  .wiki h4, .wiki h5, .wiki h6 { margin: 1rem 0 .3rem; color: var(--text); font-size: 1rem; }
+  .wiki [id] { scroll-margin-top: 5rem; }
+  .wiki img { max-width: 100%; height: auto; vertical-align: middle; }
+  .wiki figure { max-width: 100%; margin: 1rem auto; text-align: center; }
+  .wiki figure img { display: block; margin: 0 auto; }
+  .wiki figcaption { margin-top: .4rem; color: var(--muted); font-size: .85rem; line-height: 1.4; text-align: left; }
+  .wiki blockquote { margin: 1rem 0; padding-left: .9rem; border-left: 3px solid var(--line); color: var(--muted); }
+  .wiki ul, .wiki ol { padding-left: 1.4rem; }
+  .wiki li::marker { color: var(--muted); }
+  .wiki hr { border: 0; border-top: 1px solid var(--line); }
+  .wiki code, .wiki pre, .wiki kbd, .wiki samp { background: var(--panel-2); color: var(--text); font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: .9em; }
+  .wiki pre { padding: .75rem; overflow-x: auto; border: 1px solid var(--line); }
+  .wiki .hatnote { margin: 0 0 .6rem; padding-left: 1rem; color: var(--muted); font-size: .92rem; font-style: italic; }
+  .wiki-table-scroll { max-width: 100%; margin: 1rem 0; overflow-x: auto; }
+  .wiki table { border-collapse: collapse; font-size: .9rem; line-height: 1.4; }
+  .wiki th, .wiki td { padding: .35rem .55rem; border: 1px solid var(--line); text-align: left; vertical-align: top; }
+  .wiki th { background: var(--panel-2); color: var(--text); }
+  .wiki caption { padding: .35rem; color: var(--text); font-weight: 700; }
+  .wiki .infobox, .wiki .sidebar { width: 100%; border: 1px solid var(--line); background: var(--panel); }
+  .wiki .infobox th, .wiki .infobox td, .wiki .sidebar th, .wiki .sidebar td { border: 0; border-top: 1px solid var(--line); background: none; }
+  .wiki .infobox-above, .wiki .infobox-title, .wiki .sidebar-title { color: var(--text); font-size: 1.15rem; font-weight: 700; text-align: center; }
+  .wiki .infobox-image, .wiki .infobox-caption, .wiki .sidebar-image { text-align: center; }
+  .wiki .infobox-caption { color: var(--muted); font-size: .85rem; }
+  .wiki .infobox .infobox-header, .wiki .infobox .infobox-subheader, .wiki .sidebar .sidebar-heading { background: var(--panel-2); color: var(--text); text-align: center; }
+  .wiki .hlist ul, .wiki .hlist ol { margin: 0; padding: 0; }
+  .wiki .hlist li { display: inline; }
+  .wiki .hlist li:not(:last-child)::after { content: " · "; font-weight: 700; }
+  .wiki .plainlist ul, .wiki .plainlist ol { margin: 0; padding: 0; list-style: none; }
+  .wiki .gallery { display: flex; flex-wrap: wrap; gap: .75rem; padding: 0; list-style: none; }
+  .wiki .gallerybox { flex: 1 1 10rem; max-width: 100%; }
+  .wiki .gallerytext { color: var(--muted); font-size: .85rem; }
+  @media (prefers-color-scheme: dark) {
+    /* Diagrams and logos are often drawn for a white page, so transparent formats get a light plate. */
+    .wiki img[src*=".svg"], .wiki img[src*=".png"] { background: #f4f5f7; }
+    .wiki .skin-invert, .wiki .mw-invert, .wiki .skin-invert-image img { filter: invert(1) hue-rotate(180deg); background: none; }
+  }
+  @media (min-width: 48rem) and (pointer: fine) {
+    .wiki-infobox-wrap { float: right; clear: right; max-width: 22rem; margin: 0 0 1rem 1.5rem; }
+    .wiki figure.mw-halign-right,
+    .wiki figure.mw-default-size:not(.mw-halign-left):not(.mw-halign-center):not(.mw-halign-none) { float: right; clear: right; max-width: 18rem; margin: .25rem 0 1rem 1.5rem; }
+    .wiki figure.mw-halign-left { float: left; clear: left; max-width: 18rem; margin: .25rem 1.5rem 1rem 0; }
+  }
+</style>
+</head>
+<body>
+
+<!-- 1. First run: the player's own contact details for Wikipedia's API -->
+<main id="setup" hidden>
+  <h1>Wikirace</h1>
+  <p class="lede">Wikipedia asks every app that reads its API to say who is behind it. Your name and email go
+    in the requests this app sends from your laptop, and are saved in <code>.env</code>. Nothing is sent anywhere else.</p>
+  <form class="fields" id="setup-form">
+    <label>Your name <input name="name" required autocomplete="name"></label>
+    <label>Your email <input name="email" type="email" required autocomplete="email"></label>
+    <div class="actions"><button type="submit">Save</button></div>
+  </form>
+  <p class="message" id="setup-message" role="status"></p>
+</main>
+
+<!-- 2. Pick a start page and a target -->
+<main id="home" hidden>
+  <h1>Wikirace</h1>
+  <p class="lede">Get from the starting page to the target by clicking links inside the article. Fewest clicks wins.</p>
+  <form class="fields" id="pair-form">
+    <label>Starting point <input name="start" value="Banana" required autocomplete="off"></label>
+    <label>Target <input name="target" value="Napoleon" required autocomplete="off"></label>
+    <div class="actions">
+      <button type="submit" name="mode" value="human">Play</button>
+      <button type="submit" name="mode" value="jev" class="secondary jev-only" hidden>Play with Jev</button>
+      <span class="locked jev-locked">Play with Jev unlocks later in the session.</span>
+    </div>
+  </form>
+  <p class="message" id="home-message" role="status"></p>
+</main>
+
+<!-- 3. Playing -->
+<div id="game" hidden>
+  <div class="bar">
+    <div class="bar-inner">
+      <div class="goal"><small>Target</small><strong id="goal-title"></strong></div>
+      <div class="stat"><small>Clicks</small><strong id="clicks">0</strong></div>
+      <div class="stat"><small>Time</small><strong id="clock">0:00</strong></div>
+      <button type="button" class="secondary" id="back">Back</button>
+      <button type="button" class="secondary" id="give-up">Give up</button>
+    </div>
+  </div>
+  <main>
+    <h1 id="page-title"></h1>
+    <div id="article" class="wiki"></div>
+  </main>
+</div>
+
+<!-- 4. Your result -->
+<main id="result" hidden>
+  <h1>Wikirace</h1>
+  <ol class="path" id="result-path" aria-label="Your path"></ol>
+  <div class="summary" id="result-summary"></div>
+</main>
+
+<!-- 5. Jev plays the same pair -->
+<main id="jev" hidden>
+  <h1>Jev plays</h1>
+  <p class="lede">Jev picks every click. Plain code fetches the pages and spots the target.</p>
+  <p class="message" id="jev-status" role="status"></p>
+  <ol class="path" id="jev-path" aria-label="Jev's path"></ol>
+  <ol id="hops"></ol>
+  <div class="summary" id="jev-summary" hidden></div>
+</main>
+
+<template id="hop-template">
+  <li class="hop">
+    <header>
+      <h2><span class="n"></span><a target="_blank" rel="noopener"></a></h2>
+      <span class="meta"></span>
+    </header>
+    <p class="note" hidden></p>
+    <ol class="options"></ol>
+  </li>
+</template>
+
+<script>
+  const $ = id => document.getElementById(id);
+  const screens = ['setup', 'home', 'game', 'result', 'jev'];
+  let jevUnlocked = false;
+  let pair = null;        // { start, target } as typed
+  let goal = null;        // { title, summary } canonical target
+  let run = null;         // this human run: { pages: [{title, html}], startedAt, timer }
+  let lastHuman = null;   // { start, target, won, clicks, seconds } for comparing with Jev
+  let source = null;
+
+  const wikiUrl = title => `https://en.wikipedia.org/wiki/${encodeURIComponent(title.replaceAll(' ', '_'))}`;
+  const ms = value => `${Math.round(value).toLocaleString()} ms`;
+  const clock = seconds => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
+  const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+  function el(tag, className, text) {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  }
+
+  function show(screen) {
+    for (const id of screens) $(id).hidden = id !== screen;
+    window.scrollTo(0, 0);
+  }
+
+  function setMessage(id, text, isError = false) {
+    $(id).textContent = text;
+    $(id).classList.toggle('error', isError);
+  }
+
+  async function api(path, options) {
+    const response = await fetch(path, options);
+    const body = await response.json();
+    if (body.needContact) {
+      show('setup');
+      throw new Error(body.error);
+    }
+    if (!response.ok) throw new Error(body.error || `Request failed (${response.status})`);
+    return body;
+  }
+
+  async function refreshStatus() {
+    const status = await api('/api/status');
+    jevUnlocked = status.jev;
+    for (const node of document.querySelectorAll('.jev-only')) node.hidden = !jevUnlocked;
+    for (const node of document.querySelectorAll('.jev-locked')) node.hidden = jevUnlocked;
+    return status;
+  }
+
+  async function goHome() {
+    await refreshStatus();
+    show('home');
+  }
+
+  function pathList(listId, titles, targetTitle, reached) {
+    const list = $(listId);
+    list.replaceChildren();
+    for (const title of titles) {
+      const li = el('li');
+      li.append(el('span', 'chip', title));
+      list.append(li);
+    }
+    if (!reached) {
+      const li = el('li');
+      li.append(el('span', 'chip target', targetTitle));
+      list.append(li);
+    } else {
+      list.lastElementChild.firstElementChild.className = 'chip reached';
+    }
+  }
+
+  // ---------- 1. setup ----------
+  $('setup-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const data = new FormData(e.target);
+    try {
+      await api('/api/contact', { method: 'POST', body: JSON.stringify({ name: data.get('name'), email: data.get('email') }) });
+      await goHome();
+    } catch (error) {
+      setMessage('setup-message', error.message, true);
+    }
+  });
+
+  // ---------- 2. home ----------
+  $('pair-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const data = new FormData(e.target);
+    pair = { start: data.get('start').trim(), target: data.get('target').trim() };
+    if (e.submitter?.value === 'jev') return playJev();
+    setMessage('home-message', 'Loading…');
+    try {
+      goal = await api(`/api/target?title=${encodeURIComponent(pair.target)}`);
+      const first = await api(`/api/page?title=${encodeURIComponent(pair.start)}`);
+      if (first.title === goal.title) throw new Error('The starting point and the target are the same page.');
+      setMessage('home-message', '');
+      startRun(first);
+    } catch (error) {
+      setMessage('home-message', error.message, true);
+    }
+  });
+
+  // ---------- 3. playing ----------
+  function startRun(firstPage) {
+    run = { pages: [firstPage], startedAt: performance.now() };
+    run.timer = setInterval(() => { $('clock').textContent = clock((performance.now() - run.startedAt) / 1000); }, 250);
+    $('goal-title').textContent = goal.title;
+    $('goal-title').title = goal.summary;
+    $('clock').textContent = '0:00';
+    show('game');
+    renderPage();
+  }
+
+  function renderPage(fragment) {
+    const current = run.pages.at(-1);
+    $('page-title').textContent = current.title;
+    $('article').innerHTML = current.html; // sanitized on the server by article.py
+    for (const link of $('article').querySelectorAll('a[data-title]')) link.tabIndex = 0;
+    $('clicks').textContent = String(run.pages.length - 1);
+    $('back').disabled = run.pages.length < 2;
+    const anchor = fragment && document.getElementById(`wr-${fragment}`);
+    if (anchor) anchor.scrollIntoView();
+    else window.scrollTo(0, 0);
+  }
+
+  async function follow(link) {
+    if ($('game').classList.contains('busy')) return;
+    $('game').classList.add('busy');
+    try {
+      const next = await api(`/api/page?title=${encodeURIComponent(link.dataset.title)}`);
+      run.pages.push(next);
+      if (next.title === goal.title) return finishRun(true);
+      renderPage(link.dataset.fragment);
+    } catch (error) {
+      alert(error.message);
+    } finally {
+      $('game').classList.remove('busy');
+    }
+  }
+
+  $('article').addEventListener('click', e => {
+    const link = e.target.closest('a[data-title]');
+    if (!link) return;
+    e.preventDefault();
+    follow(link);
+  });
+  $('article').addEventListener('keydown', e => {
+    const link = e.target.closest('a[data-title]');
+    if (link && e.key === 'Enter') follow(link);
+  });
+  // Going back removes the page from your path, so it also takes a click off the count.
+  $('back').addEventListener('click', () => {
+    run.pages.pop();
+    renderPage();
+  });
+  $('give-up').addEventListener('click', () => finishRun(false));
+
+  // ---------- 4. result ----------
+  async function finishRun(won) {
+    clearInterval(run.timer);
+    const seconds = (performance.now() - run.startedAt) / 1000;
+    const titles = run.pages.map(p => p.title);
+    lastHuman = { ...pair, won, clicks: titles.length - 1, seconds };
+    pathList('result-path', titles, goal.title, won);
+
+    const summary = $('result-summary');
+    summary.replaceChildren(
+      el('strong', won ? 'won' : 'lost', won ? `You reached ${goal.title} in ${plural(titles.length - 1, 'click')}`
+                                            : `You gave up after ${plural(titles.length - 1, 'click')}`),
+      el('p', '', `Time ${clock(seconds)}`),
+    );
+    const actions = el('div', 'actions');
+    const again = el('button', 'secondary', 'Play again');
+    again.type = 'button';
+    again.addEventListener('click', goHome);
+    const jev = el('button', '', 'Play with Jev');
+    jev.type = 'button';
+    jev.addEventListener('click', playJev);
+    await refreshStatus();
+    if (jevUnlocked) actions.append(jev);
+    else actions.append(el('span', 'locked', 'Play with Jev unlocks later in the session.'));
+    actions.prepend(again);
+    summary.append(actions);
+    show('result');
+  }
+
+  // ---------- 5. Jev ----------
+  function showHop(event) {
+    const card = $('hop-template').content.firstElementChild.cloneNode(true);
+    card.querySelector('.n').textContent = `${event.n}.`;
+    const link = card.querySelector('h2 a');
+    link.textContent = event.page;
+    link.href = wikiUrl(event.page);
+    const meta = card.querySelector('.meta');
+    const note = card.querySelector('.note');
+    if (event.by === 'jev') {
+      meta.textContent = `${event.links.toLocaleString()} links · ${plural(event.calls, 'call')} · ` +
+        `Jev ${ms(event.jev_ms)} · Wikipedia ${ms(event.wiki_ms)}`;
+      const options = card.querySelector('.options');
+      event.top.forEach(([title, p], i) => {
+        const row = el('li', i === 0 ? 'option chosen' : 'option');
+        const name = el('span', 'name', title);
+        name.title = title;
+        const track = el('span', 'track');
+        const fill = el('span', 'fill');
+        fill.style.width = `${(p * 100).toFixed(1)}%`;
+        track.append(fill);
+        row.append(name, track, el('span', 'pct', `${(p * 100).toFixed(1)}%`));
+        options.append(row);
+      });
+      setMessage('jev-status', `Clicked ${event.pick}. Fetching it…`);
+    } else {
+      meta.textContent = `Wikipedia ${ms(event.wiki_ms)}`;
+      note.hidden = false;
+      note.textContent = event.pick
+        ? `${event.pick} is linked on this page, so code clicks it. No model call needed.`
+        : 'No unvisited links left on this page.';
+    }
+    $('hops').append(card);
+    card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  function showJevDone(event, targetTitle) {
+    pathList('jev-path', event.path, targetTitle, event.won);
+    const summary = $('jev-summary');
+    const perDecision = event.decisions ? event.jev_s * 1000 / event.decisions : 0;
+    summary.replaceChildren(
+      el('strong', event.won ? 'won' : 'lost', event.won ? `Jev reached ${targetTitle} in ${plural(event.clicks, 'click')}`
+                                                        : `Jev did not reach ${targetTitle} in ${plural(event.clicks, 'click')}`),
+      el('p', '', `Total ${event.total_s.toFixed(1)} s · Jev ${event.jev_s.toFixed(2)} s over ${plural(event.decisions, 'decision')} ` +
+                  `(${ms(perDecision)} each) · Wikipedia ${event.wiki_s.toFixed(2)} s`),
+    );
+    if (lastHuman && lastHuman.start === pair.start && lastHuman.target === pair.target) {
+      summary.append(el('p', '', lastHuman.won
+        ? `You: ${plural(lastHuman.clicks, 'click')} in ${clock(lastHuman.seconds)}.`
+        : `You gave up after ${plural(lastHuman.clicks, 'click')} and ${clock(lastHuman.seconds)}.`));
+    }
+    const actions = el('div', 'actions');
+    const again = el('button', 'secondary', 'Play again');
+    again.type = 'button';
+    again.addEventListener('click', goHome);
+    actions.append(again);
+    summary.append(actions);
+    summary.hidden = false;
+    setMessage('jev-status', '');
+  }
+
+  function playJev() {
+    source?.close();
+    $('hops').replaceChildren();
+    $('jev-path').replaceChildren();
+    $('jev-summary').hidden = true;
+    setMessage('jev-status', 'Looking up the target…');
+    show('jev');
+    let targetTitle = pair.target;
+    const visited = [];
+    source = new EventSource(`/race?${new URLSearchParams(pair)}`);
+    const finish = () => { source?.close(); source = null; };
+    source.onmessage = ({ data }) => {
+      const event = JSON.parse(data);
+      if (event.type === 'target') {
+        targetTitle = event.title;
+        pathList('jev-path', visited, targetTitle, false);
+        setMessage('jev-status', 'Reading the starting page…');
+      } else if (event.type === 'hop') {
+        visited.push(event.page);
+        pathList('jev-path', visited, targetTitle, false);
+        showHop(event);
+      } else if (event.type === 'done') {
+        showJevDone(event, targetTitle);
+        finish();
+      } else if (event.type === 'error') {
+        setMessage('jev-status', event.message, true);
+        const back = el('button', 'secondary', 'Back');
+        back.type = 'button';
+        back.style.marginLeft = '12px';
+        back.addEventListener('click', goHome);
+        $('jev-status').append(back);
+        finish();
+      }
+    };
+    // The server ends the stream after "done"; without this the browser would reconnect and rerun the race.
+    source.onerror = () => {
+      if (source) setMessage('jev-status', 'Lost the connection to the server.', true);
+      finish();
+    };
+  }
+
+  // ---------- start ----------
+  refreshStatus()
+    .then(status => show(status.contact ? 'home' : 'setup'))
+    .catch(error => { show('home'); setMessage('home-message', error.message, true); });
+</script>
+</body>
+</html>
