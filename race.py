@@ -1,9 +1,8 @@
 """Run a Wikipedia race: uv run race.py "Banana" "Napoleon"  (no arguments runs a sample set).
 
 `race()` yields an event per step, so the command line and the web page share one loop.
-Jev's decision comes from `choose_link` in decide.py, which the session hands out later.
-Everything else is here: pages, loop avoidance, the exact target check, and pages with
-more links than one Jev question can hold.
+Jev's decision comes from `choose_link` in decide.py. Everything else is here: pages, loop
+avoidance, the exact target check, and pages with more links than one Jev question can hold.
 """
 
 import math
@@ -120,10 +119,7 @@ def print_race(start: str, target: str, choose_link: ChooseLink) -> dict:
 
 
 if __name__ == "__main__":
-    try:
-        from decide import choose_link
-    except ModuleNotFoundError:
-        sys.exit("decide.py is missing. Copy handout/decide.py into this folder first.")
+    from decide import choose_link
     pairs = [tuple(sys.argv[1:3])] if len(sys.argv) == 3 else SAMPLES
     results = [print_race(start, target, choose_link) for start, target in pairs]
     if len(results) > 1:

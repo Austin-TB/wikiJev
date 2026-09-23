@@ -1,8 +1,8 @@
 """Jev's part of the Wikipedia race: which link do we click next?
 
-The app does everything else: it fetches pages, runs the race, avoids loops and spots
-the target. This file only turns the current situation into a question for Jev and
-hands back Jev's answer.
+The app runs the race: it fetches each page, skips pages already visited, clicks the target
+itself when a page links to it, and splits pages with more than 255 links into groups. On
+every other page it asks this file one question, and Jev's answer picks the next click.
 """
 
 from dotenv import load_dotenv
