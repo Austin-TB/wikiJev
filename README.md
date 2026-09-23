@@ -1,54 +1,38 @@
 # Wikirace with Jev
 
-Race across Wikipedia in your browser: start on one article and reach a target by clicking links
-inside the article, in as few clicks as you can. First you play by hand. Later in the session you
-hand the clicking to Jev, TypeSafe's model, and change how it decides.
+You raced across Wikipedia in the room. Here you watch Jev, TypeSafe's model, race on your own
+laptop: pick a start and a target, press Go, and see which links Jev weighs on every page and
+which one it clicks. Then change how Jev decides, in `decide.py`, and race again.
 
 ## Set up
 
-You need [uv](https://docs.astral.sh/uv/getting-started/installation/) (it installs Python for you
-if needed) and a TypeSafe API key from [console.typesafe.ai](https://console.typesafe.ai).
+You need [uv](https://docs.astral.sh/uv/getting-started/installation/), which installs Python for
+you if needed, and a TypeSafe API key from [console.typesafe.ai](https://console.typesafe.ai).
+
+In this folder, run:
 
 ```sh
 cp .env.example .env
 ```
 
-Open `.env` and:
+On Windows, run `copy .env.example .env` instead. Then open `.env` and fill in both lines:
 
-- put your key after `TYPESAFE_API_KEY=`
-- delete the `WIKIPEDIA_CONTACT` line. The app asks for your name and email the first time you open it.
+- `TYPESAFE_API_KEY=`: your key.
+- `WIKIPEDIA_CONTACT=`: your name and email, in place of `Your Name; you@example.com`. Wikipedia's
+  API policy asks every app to say who is sending its requests. Your details go only to Wikipedia.
 
-Wikipedia's API policy asks every app to say who is sending its requests. Without contact details it
-allows only 10 requests a minute. Your name and email are saved in `.env` and go only to Wikipedia.
-
-## Play by hand
+## Run
 
 ```sh
 uv run server.py
 ```
 
-Open <http://localhost:8000>. The first run installs the Python packages, so it can take a minute.
-Pick a starting page and a target (try Banana → Napoleon), then click links inside the article until
-you reach the target. The server listens on your laptop only, because it uses your TypeSafe key.
+Open <http://localhost:8000> and press **Go**. The first run installs the Python packages, so it
+can take a minute. The server listens on your laptop only, because it uses your TypeSafe key.
 
-## Play with Jev
-
-Later in the session, copy Jev's decision file into this folder:
-
-```sh
-cp handout/decide.py .
-```
-
-Reload the page and **Play with Jev** appears. Jev races the same pages while you watch each click,
-with the links it rated highest. The server picks up your edits to `decide.py` on the next race, so
-you don't need to restart it.
-
-Or from the command line:
-
-```sh
-uv run race.py                        # six sample races, then a score
-uv run race.py "Banana" "Napoleon"    # one race
-```
+Each page Jev lands on appears as a card. It shows how many links Jev chose from, how long Jev
+and Wikipedia took, and the five links Jev rated highest, with its pick highlighted. When a page
+links straight to the target, the app clicks it without asking Jev.
 
 ## How Jev decides
 
@@ -58,13 +42,19 @@ uv run race.py "Banana" "Napoleon"    # one race
 choose_link(target, target_summary, current_page, links) -> dict[str, float]
 ```
 
-gets the situation as plain text and up to 255 link titles, and returns a probability for each
-link. Inside are three commented steps: build the context, list the options, ask one Choice
-question.
+gets the situation as plain text and up to 255 link titles, and returns each link's probability
+of being the best next click. It works in three commented steps:
 
-Everything else is in `race.py`: loading pages, skipping pages already visited, spotting a link
-that leads straight to the target, and splitting pages with more than 255 links into groups. So you
-can change how Jev thinks without breaking the game.
+1. **Context**: the target's title and summary, and the page Jev is on.
+2. **Options**: the link titles to choose from.
+3. **Question**: one Choice question, `INSTRUCTIONS`, asking which link is most closely related
+   to the target. Jev answers with a probability for every link.
+
+The app does everything around it, in `race.py` and `wiki.py`. It fetches each page and keeps
+only the links you could click in the room: links in the article text, not in navigation boxes
+or reference lists. It skips pages Jev has already visited and clicks the target itself when a
+page links to it. A page with more than 255 links is split into groups, and Jev then chooses
+between the best five of each group. So you can change how Jev thinks without breaking the race.
 
 ## Things to try in `decide.py`
 
@@ -74,16 +64,25 @@ can change how Jev thinks without breaking the game.
 - Remove Jev entirely: return the same probability for every link
   (`{link: 1 / len(links) for link in links}`) and see how far a race gets.
 
-After each change, run `uv run race.py` and compare the last line: races won out of six, average
-clicks, and time per decision.
+Save the file and press **Go** again. The server picks up your edit without a restart.
+
+## From the command line
+
+```sh
+uv run race.py                        # six sample races, then a score
+uv run race.py "Banana" "Napoleon"    # one race
+```
+
+The last line of the sample run is the quickest way to compare two versions of `decide.py`: races
+won out of six, average clicks, and time per decision. Jev's close calls can go either way from
+one run to the next, so run it twice before trusting a small difference.
 
 ## Files
 
 | File | What it does |
 | --- | --- |
-| `handout/decide.py` | Jev's decision. The file you copy and edit. |
+| `decide.py` | Jev's decision. The file you edit. |
 | `race.py` | The race loop, shared by the page and the command line. |
-| `wiki.py`, `article.py`, `wiki_titles.py` | Wikipedia pages, and the rules for which links count. |
-| `server.py`, `index.html` | The browser app. |
-| `warm.py` | Fetches a race's first pages ahead of time: `uv run warm.py "Banana" "Napoleon"`. |
+| `wiki.py` | Wikipedia pages, and the rules for which links count. |
+| `server.py`, `index.html` | The page at localhost:8000. |
 | `wiki_cache/` | Pages already fetched, so repeat races are fast and spare Wikipedia. |

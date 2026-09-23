@@ -20,7 +20,7 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent / ".env")
 
 API = "https://en.wikipedia.org/w/api.php"
-CONTACT_LINE = 'WIKIPEDIA_CONTACT="Your Name; you@example.com"'
+PLACEHOLDER = "Your Name; you@example.com"  # WIKIPEDIA_CONTACT in .env.example
 _http = httpx.Client(timeout=20)
 
 # One file per page. Races see the same pages every time, the repo can ship the pages people
@@ -61,7 +61,7 @@ REMOVE = ", ".join([
 
 
 class NoContact(Exception):
-    """Raised when .env has no WIKIPEDIA_CONTACT with an email address or URL."""
+    """Raised when .env has no WIKIPEDIA_CONTACT with an email address or URL, or still has the placeholder."""
 
 
 def normalize_title(raw: str) -> str:
@@ -130,9 +130,9 @@ def _api(**params) -> dict:
     """One API call, retrying 429/503 as Retry-After asks."""
     # Wikimedia allows 10 requests a minute without contact details in the User-Agent, 200 with them.
     contact = os.environ.get("WIKIPEDIA_CONTACT", "").strip()
-    if not re.search(r"@|https?://", contact):
-        raise NoContact("Wikipedia's API policy asks for your contact details. Add this line to .env, "
-                        f"with your name and email, and start the app again:\n{CONTACT_LINE}")
+    if contact == PLACEHOLDER or not re.search(r"@|https?://", contact):
+        raise NoContact("Wikipedia's API policy asks for your contact details. Put your name and email "
+                        f'in .env on this line, then start the app again:\nWIKIPEDIA_CONTACT="{PLACEHOLDER}"')
     params |= {"format": "json", "formatversion": 2}
     headers = {"User-Agent": f"aic-handson-wikirace/0.1 ({contact})"}
     for attempt in range(3):
